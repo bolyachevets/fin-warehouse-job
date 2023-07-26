@@ -1,4 +1,4 @@
-FROM debian:10.5-slim
+FROM google/cloud-sdk:latest
 
 ARG VCS_REF="missing"
 ARG BUILD_DATE="missing"
