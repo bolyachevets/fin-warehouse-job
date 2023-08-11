@@ -11,5 +11,5 @@ src="./postgresql-dev-pay-db_${date}_01-00-00.sql.gz"
 gsutil cp $src "gs://${DB_BUCKET}"
 gcloud --quiet sql databases delete $DB_NAME --instance=$GCP_SQL_INSTANCE
 gcloud sql databases create $DB_NAME --instance=$GCP_SQL_INSTANCE
-gcloud --quiet sql import sql sbc-pay-sandbox "gs://${DB_BUCKET}/postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz" --database=$DB_NAME --user=$DB_USER
-gcloud sql users set-password pay --instance=sbc-pay-sandbox --password=$DB_PASSWORD
+gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz" --database=$DB_NAME --user=$DB_USER
+gcloud sql users set-password $$DB_USER --instance=$GCP_SQL_INSTANCE --password=$DB_PASSWORD
