@@ -1,7 +1,7 @@
 #! /bin/sh
 cd /opt/app-root
 oc login --server=$OC_SERVER --token=$OC_TOKEN
-pod_name=$(oc -n $OC_NAMESPACE get pods --selector='app=backup' -o name)
+pod_name=$(oc -n $OC_NAMESPACE get pods --selector=$OC_LABEL -o name)
 prefix="pod/"
 pod_name=${pod_name#"$prefix"}
 date=$(TZ=US/Pacific date +%Y-%m-%d)
