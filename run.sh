@@ -7,7 +7,7 @@ pod_name=${pod_name#"$prefix"}
 date=$(TZ=US/Pacific date +%Y-%m-%d)
 src="${pod_name}://backups/daily/${date}/postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz"
 oc -n $OC_NAMESPACE cp $src .
-src="./postgresql-dev-pay-db_${date}_01-00-00.sql.gz"
+src="./postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz"
 gsutil cp $src "gs://${DB_BUCKET}"
 gcloud --quiet sql databases delete $DB_NAME --instance=$GCP_SQL_INSTANCE
 gcloud sql databases create $DB_NAME --instance=$GCP_SQL_INSTANCE
