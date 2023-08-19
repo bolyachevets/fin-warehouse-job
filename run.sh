@@ -1,7 +1,7 @@
 #! /bin/sh
 cd /opt/app-root
 oc login --server=$OC_SERVER --token=$OC_TOKEN
-oc -n $OC_ORACLE_JOB_NAMESPACE create -f pvc-connector-pod.yaml
+oc -n $OC_NAMESPACE create -f pvc-connector-pod.yaml
 pod_name=$(oc -n $OC_NAMESPACE get pods --selector=$OC_LABEL -o name)
 prefix="pod/"
 pod_name=${pod_name#"$prefix"}
@@ -9,8 +9,8 @@ date=$(TZ=US/Pacific date +%Y-%m-%d)
 src="${pod_name}://backups/daily/${date}/postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz"
 oc -n $OC_NAMESPACE cp $src .
 src="pvc-inspector://data/output.sql"
-oc -n $OC_CRON_NAMESPACE cp $src .
-oc -n $OC_CRON_NAMESPACE delete pod pvc-inspector
+oc -n $OC_NAMESPACE cp $src .
+oc -n $OC_NAMESPACE delete pod pvc-inspector
 src="./output.sql"
 sed -i '' -e "2s/^//p; 2s/^.*/SET search_path TO COLIN;/" ./output.sql
 gsutil cp $src "gs://${DB_BUCKET}"
