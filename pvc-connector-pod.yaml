@@ -1,0 +1,16 @@
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: pvc-inspector
+  spec:
+    containers:
+    - name: alpine
+      image: alpine:latest
+      command: ['sleep', 'infinity']
+      volumeMounts:
+        - name: ora2pg-vol
+          mountPath: /data
+    volumes:
+      - name: ora2pg-vol
+        persistentVolumeClaim:
+          claimName: ora2pg-pvc
