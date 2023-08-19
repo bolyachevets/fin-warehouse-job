@@ -1,13 +1,14 @@
 #! /bin/sh
 cd /opt/app-root
 oc login --server=$OC_SERVER --token=$OC_TOKEN
-oc -n $OC_NAMESPACE create -f pvc-connector-pod.yaml
 pod_name=$(oc -n $OC_NAMESPACE get pods --selector=$OC_LABEL -o name)
 prefix="pod/"
 pod_name=${pod_name#"$prefix"}
 date=$(TZ=US/Pacific date +%Y-%m-%d)
 src="${pod_name}://backups/daily/${date}/postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz"
 oc -n $OC_NAMESPACE cp $src .
+oc -n $OC_NAMESPACE create -f pvc-connector-pod.yaml
+oc -n $OC_NAMESPACE wait --for=condition=ready pod pvc-inspector
 src="pvc-inspector://data/output.sql"
 oc -n $OC_NAMESPACE cp $src .
 oc -n $OC_NAMESPACE delete pod pvc-inspector
