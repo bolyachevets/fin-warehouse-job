@@ -12,8 +12,8 @@ oc -n $OC_NAMESPACE wait --for=condition=ready pod pvc-inspector
 src="pvc-inspector://data/output.sql"
 oc -n $OC_NAMESPACE cp $src .
 oc -n $OC_NAMESPACE delete pod pvc-inspector
-src="./output.sql"
-sed -i '' -e "2s/^//p; 2s/^.*/SET search_path TO COLIN;/" ./output.sql
+src="output.sql"
+sed -i '' -e "2s/^//p; 2s/^.*/SET search_path TO COLIN;/" $src
 gsutil cp $src "gs://${DB_BUCKET}"
 src="./postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz"
 gsutil cp $src "gs://${DB_BUCKET}"
