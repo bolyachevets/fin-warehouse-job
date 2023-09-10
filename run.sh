@@ -8,12 +8,12 @@ date=$(TZ=US/Pacific date +%Y-%m-%d)
 src="${pod_name}://backups/daily/${date}/postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz"
 oc -n $OC_NAMESPACE cp $src .
 oc -n $OC_NAMESPACE create -f pvc-connector-pod.yaml
-oc -n $OC_NAMESPACE wait --for=condition=ready pod pvc-inspector
-src="pvc-inspector://data/output.sql"
+oc -n $OC_NAMESPACE wait --for=condition=ready pod pvc-connector
+src="pvc-connector://data/output.sql"
 oc -n $OC_NAMESPACE cp $src .
-oc -n $OC_NAMESPACE delete pod pvc-inspector
+oc -n $OC_NAMESPACE delete pod pvc-connector
 src="output.sql"
-sed -i '' -e "2s/^//p; 2s/^.*/SET search_path TO COLIN;/" $src
+sed -i -e "2s/^//p; 2s/^.*/SET search_path TO COLIN;/" $src
 gsutil cp $src "gs://${DB_BUCKET}"
 src="./postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz"
 gsutil cp $src "gs://${DB_BUCKET}"
