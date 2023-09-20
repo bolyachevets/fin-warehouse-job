@@ -11,6 +11,7 @@ src="${pod_name}://backups/daily/${date}/${pay_db_file}"
 oc -n $OC_NAMESPACE cp $src .
 gunzip $pay_db_file
 pay_db_file2="postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql"
+sed -i -e "6s/^//p; 6s/^.*/DROP SCHEMA IF EXISTS postgres_exporter CASCADE;/" $pay_db_file2
 sed -i -e "6s/^//p; 6s/^.*/DROP SCHEMA IF EXISTS PAY CASCADE;/" $pay_db_file2
 sed -i -e "7s/^//p; 7s/^.*/ALTER SCHEMA public RENAME to public_save;/" $pay_db_file2
 sed -i -e "8s/^//p; 8s/^.*/CREATE SCHEMA public;/" $pay_db_file2
