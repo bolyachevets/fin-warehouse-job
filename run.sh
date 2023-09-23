@@ -24,38 +24,19 @@ gsutil cp $pay_db_file "gs://${DB_BUCKET}"
 gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${pay_db_file}" --database=$DB_NAME --user=$DB_USER
 oc -n $OC_NAMESPACE create -f pvc-connector-pod.yaml
 oc -n $OC_NAMESPACE wait --for=condition=ready pod pvc-connector
-file1="bcol_billing.sql"
-file2="business_activity.sql"
-file3="business_info.sql"
-file4="societies.sql"
-src="pvc-connector://data"
-oc -n $OC_NAMESPACE cp "${src}/${file1}" .
-oc -n $OC_NAMESPACE cp "${src}/${file2}" .
-oc -n $OC_NAMESPACE cp "${src}/${file3}" .
-oc -n $OC_NAMESPACE cp "${src}/${file4}" .
-oc -n $OC_NAMESPACE delete pod pvc-connector
-sed -i -e "2s/^//p; 2s/^.*/SET search_path TO COLIN;/" $file1
-gsutil cp $file1 "gs://${DB_BUCKET}"
-rm $file1
-sed -i -e "2s/^//p; 2s/^.*/SET search_path TO COLIN;/" $file2
-gsutil cp $file2 "gs://${DB_BUCKET}"
-rm $file2
-sed -i -e "2s/^//p; 2s/^.*/SET search_path TO COLIN;/" $file3
-gsutil cp $file3 "gs://${DB_BUCKET}"
-rm $file3
-sed -i -e "2s/^//p; 2s/^.*/SET search_path TO COLIN;/" $file4
-gsutil cp $file4 "gs://${DB_BUCKET}"
-rm $file4
-gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin.sql" --database=$DB_NAME
-gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${file1}" --database=$DB_NAME
-gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait
-gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${file2}" --database=$DB_NAME
-gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait
-gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${file3}" --database=$DB_NAME
-gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait
-gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${file4}" --database=$DB_NAME
-gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait
-gcloud sql users set-password $DB_USER --instance=$GCP_SQL_INSTANCE --password=$DB_PASSWORD
+file_dir="data"
+pod_name="pvc-connector"
+src="${pod_name}://${file_dir}"
+oc -n $OC_NAMESPACE cp "${src}/" "./${file_dir}"
+oc -n $OC_NAMESPACE delete pod $pod_name
+# gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin.sql" --database=$DB_NAME
+for filename in "./${file_dir}"; do
+    sed -i -e "2s/^//p; 2s/^.*/SET search_path TO COLIN;/" $filename
+    gsutil cp $filename "gs://${DB_BUCKET}"
+    rm $filename
+    gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${filename}" --database=$DB_NAME
+    gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait
+done
 touch readonly.sql
 echo "CREATE USER readonly WITH PASSWORD ${DB_PASSWORD};" >> readonly.sql
 echo "GRANT CONNECT ON DATABASE fin_warehouse to readonly;" >> readonly.sql
