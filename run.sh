@@ -6,11 +6,11 @@ pod_name=$(oc -n $OC_NAMESPACE get pods --selector=$OC_LABEL -o name)
 prefix="pod/"
 pod_name=${pod_name#"$prefix"}
 date=$(TZ=US/Pacific date +%Y-%m-%d)
-pay_db_file="postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz"
-src="${pod_name}://backups/daily/${date}/${pay_db_file}"
-oc -n $OC_NAMESPACE cp $src .
+src="${pod_name}://backups/daily/${date}/postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz"
+pay_db_file="pay-db.sql.gz"
+oc -n $OC_NAMESPACE cp $src $pay_db_file
 gunzip $pay_db_file
-pay_db_file2="postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql"
+pay_db_file2="pay-db.sql.gz.sql"
 sed -i -e "6s/^//p; 6s/^.*/DROP SCHEMA IF EXISTS postgres_exporter CASCADE;/" $pay_db_file2
 sed -i -e "6s/^//p; 6s/^.*/DROP SCHEMA IF EXISTS PAY CASCADE;/" $pay_db_file2
 sed -i -e "7s/^//p; 7s/^.*/ALTER SCHEMA public RENAME to public_save;/" $pay_db_file2
@@ -37,13 +37,14 @@ for filename in "./${file_dir}"; do
     gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${filename}" --database=$DB_NAME
     gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait
 done
-touch readonly.sql
-echo "CREATE USER readonly WITH PASSWORD ${DB_PASSWORD};" >> readonly.sql
-echo "GRANT CONNECT ON DATABASE fin_warehouse to readonly;" >> readonly.sql
-echo "GRANT USAGE ON SCHEMA colin TO readonly;" >> readonly.sql
-echo "GRANT SELECT ON ALL TABLES IN SCHEMA colin to readonly;" >> readonly.sql
-echo "ALTER DEFAULT PRIVILEGES IN SCHEMA colin GRANT SELECT ON TABLES TO readonly;" >> readonly.sql
-echo "GRANT USAGE ON SCHEMA pay TO readonly;" >> readonly.sql
-echo "GRANT SELECT ON ALL TABLES IN SCHEMA pay to readonly;" >> readonly.sql
-echo "ALTER DEFAULT PRIVILEGES IN SCHEMA pay GRANT SELECT ON TABLES TO readonly;" >> readonly.sql
-gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/readonly.sql" --database=$DB_NAME
+# touch readonly.sql
+# echo "CREATE USER readonly WITH PASSWORD ${DB_PASSWORD};" >> readonly.sql
+# echo "GRANT CONNECT ON DATABASE fin_warehouse to readonly;" >> readonly.sql
+# echo "GRANT USAGE ON SCHEMA colin TO readonly;" >> readonly.sql
+# echo "GRANT SELECT ON ALL TABLES IN SCHEMA colin to readonly;" >> readonly.sql
+# echo "ALTER DEFAULT PRIVILEGES IN SCHEMA colin GRANT SELECT ON TABLES TO readonly;" >> readonly.sql
+# echo "GRANT USAGE ON SCHEMA pay TO readonly;" >> readonly.sql
+# echo "GRANT SELECT ON ALL TABLES IN SCHEMA pay to readonly;" >> readonly.sql
+# echo "ALTER DEFAULT PRIVILEGES IN SCHEMA pay GRANT SELECT ON TABLES TO readonly;" >> readonly.sql
+# gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/readonly.sql" --database=$DB_NAME
+# gcloud sql users set-password $DB_USER --instance=$GCP_SQL_INSTANCE --password=$DB_PASSWORD
