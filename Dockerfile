@@ -27,4 +27,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD [ "/bin/sh", "run.sh" ]
+CMD [ "/bin/bash", "run.sh" ]

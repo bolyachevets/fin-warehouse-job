@@ -1,0 +1,71 @@
+kind: CronJob
+apiVersion: batch/v1
+metadata:
+  name: ora2pg
+spec:
+  schedule: 0 2 * * *
+  concurrencyPolicy: Allow
+  suspend: false
+  jobTemplate:
+    metadata:
+      creationTimestamp: null
+    spec:
+      template:
+        metadata:
+          creationTimestamp: null
+        spec:
+          volumes:
+            - name: ora2pg-conf-vol
+              configMap:
+                name: ora2pg
+                defaultMode: 420
+            - name: ora2pg-data-vol
+              persistentVolumeClaim:
+                claimName: ora2pg-pvc
+            - name: ora2pg-data-yesterday-vol
+              persistentVolumeClaim:
+                claimName: ora2pg-pvc-yesterday
+          containers:
+            - name: ora2pg-vol
+              image: >-
+                image-registry.openshift-image-registry.svc:5000/78c88a-tools/ora2pg:latest
+              env:
+                - name: ORA_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: ora2pg
+                      key: ORA_HOST
+                - name: ORA_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: ora2pg
+                      key: ORA_USER
+                - name: ORA_PWD
+                  valueFrom:
+                    secretKeyRef:
+                      name: ora2pg
+                      key: ORA_PWD
+              resources:
+                limits:
+                  cpu: '1'
+                  memory: 1Gi
+                requests:
+                  cpu: 200m
+                  memory: 500Mi
+              volumeMounts:
+                - name: ora2pg-data-vol
+                  mountPath: /data/
+                - name: ora2pg-data-yesterday-vol
+                  mountPath: /data-yesterday/
+                - name: ora2pg-conf-vol
+                  mountPath: /config/
+              terminationMessagePath: /dev/termination-log
+              terminationMessagePolicy: File
+              imagePullPolicy: Always
+          restartPolicy: OnFailure
+          terminationGracePeriodSeconds: 30
+          dnsPolicy: ClusterFirst
+          securityContext: {}
+          schedulerName: default-scheduler
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
