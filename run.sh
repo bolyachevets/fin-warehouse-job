@@ -2,12 +2,12 @@
 root_dir="/opt/app-root"
 cd $root_dir
 
-if [ "$LOAD_PAY" == true || "$LOAD_COLIN_DELTAS" == true || "$LOAD_CAS" == true] then
+if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_CAS" == true ]; then
   echo "connecting to openshift"
   oc login --server=$OC_SERVER --token=$OC_TOKEN
 fi
 
-if [ "$LOAD_PAY" == true ] then
+if [ "$LOAD_PAY" == true ]; then
   echo "loadig colin pay-db dump ..."
   pod_name=$(oc -n $OC_NAMESPACE get pods --selector=$OC_LABEL -o name)
   prefix="pod/"
@@ -31,17 +31,17 @@ if [ "$LOAD_PAY" == true ] then
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/pay-db/${pay_db_file}" --database=$DB_NAME --user=$DB_USER
 fi
 
-if [ "$LOAD_COLIN_SCHEMA" == true ] then
+if [ "$LOAD_COLIN_SCHEMA" == true ]; then
   echo "loadig colin schema ..."
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin.sql" --database=$DB_NAME
 fi
 
-if [ "$LOAD_CAS_SCHEMA" == true ] then
+if [ "$LOAD_CAS_SCHEMA" == true ]; then
   echo "loadig cas schema ..."
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cas.sql" --database=$DB_NAME
 fi
 
-if [ "$LOAD_COLIN_DELTAS" == true] then
+if [ "$LOAD_COLIN_DELTAS" == true ]; then
   echo "copying cronjob results ..."
   pod_name="pvc-connector"
   oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
@@ -53,7 +53,7 @@ if [ "$LOAD_COLIN_DELTAS" == true] then
 fi
 
 
-if [ "$LOAD_COLIN_DELTAS" == true ] then
+if [ "$LOAD_COLIN_DELTAS" == true ]; then
   echo "loadig colin deltas ..."
   file_suffix="_delta.sql"
   schema="COLIN"
@@ -69,7 +69,7 @@ if [ "$LOAD_COLIN_DELTAS" == true ] then
   done
 fi
 
-if [ "$LOAD_CAS" == true ] then
+if [ "$LOAD_CAS" == true ]; then
   echo "loadig cas base files ..."
   # TODO - cas will be pulled from openshift VPC through the same pod as colin data above
   file_suffix="_output.sql"
@@ -84,7 +84,7 @@ fi
 
 touch readonly.sql
 
-if [ "$CREATE_READONLY_USER" == true ] then
+if [ "$CREATE_READONLY_USER" == true ]; then
   echo "writing create readonly user directives ..."
   # gcloud sql users set-password $DB_USER --instance=$GCP_SQL_INSTANCE --password=$DB_PASSWORD
   echo "CREATE USER readonly WITH PASSWORD ${DB_PASSWORD};" >> readonly.sql
@@ -92,7 +92,7 @@ if [ "$CREATE_READONLY_USER" == true ] then
 fi
 
 
-if [ "$UPDATE_READONLY_ACCESS" == true ] then
+if [ "$UPDATE_READONLY_ACCESS" == true ]; then
   echo "writing grant readonly user directives ..."
 
   echo "GRANT USAGE ON SCHEMA pay TO readonly;" >> readonly.sql
@@ -109,7 +109,7 @@ if [ "$UPDATE_READONLY_ACCESS" == true ] then
 
 fi
 
-if [ "$CREATE_READONLY_USER" == true || "$UPDATE_READONLY_ACCESS" == true ] then
+if [ "$CREATE_READONLY_USER" == true ] || [ "$UPDATE_READONLY_ACCESS" == true ]; then
   echo "applying readonly user changes ..."
   gsutil cp readonly.sql "gs://${DB_BUCKET}/"
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/readonly.sql" --database=$DB_NAME --user=$DB_USER
