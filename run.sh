@@ -10,7 +10,7 @@ src="${pod_name}://backups/daily/${date}/postgresql-${OC_ENV}-pay-db_${date}_01-
 pay_db_file="pay-db.sql.gz"
 oc -n $OC_NAMESPACE cp $src $pay_db_file
 gunzip $pay_db_file
-pay_db_file2="pay-db.sql.gz.sql"
+pay_db_file2="pay-db.sql"
 sed -i -e "6s/^//p; 6s/^.*/DROP SCHEMA IF EXISTS postgres_exporter CASCADE;/" $pay_db_file2
 sed -i -e "6s/^//p; 6s/^.*/DROP SCHEMA IF EXISTS PAY CASCADE;/" $pay_db_file2
 sed -i -e "7s/^//p; 7s/^.*/ALTER SCHEMA public RENAME to public_save;/" $pay_db_file2
@@ -20,16 +20,16 @@ sed -i -e "10s/^//p; 10s/^.*/GRANT ALL ON SCHEMA public TO public;/" $pay_db_fil
 echo "ALTER SCHEMA public RENAME to PAY;" >> $pay_db_file2
 echo "ALTER SCHEMA public_save RENAME to public;" >> $pay_db_file2
 gzip $pay_db_file2
-gsutil rm "gs://${DB_BUCKET}/pay-db/*"
-gsutil cp $pay_db_file "gs://${DB_BUCKET}/pay-db"
-gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${pay_db_file}" --database=$DB_NAME --user=$DB_USER
-pod_name="pvc-connector"
-oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
-oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
-file_dir="data"
-src="${pod_name}://${file_dir}"
-oc -n $OC_NAMESPACE cp "${src}/" "./${file_dir}"
-oc -n $OC_NAMESPACE delete pod $pod_name
+gsutil cp $pay_db_file "gs://${DB_BUCKET}/pay-db/"
+gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/pay-db/${pay_db_file}" --database=$DB_NAME --user=$DB_USER
+# pod_name="pvc-connector"
+# oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
+# oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
+# file_dir="data"
+# src="${pod_name}://${file_dir}"
+# oc -n $OC_NAMESPACE cp "${src}/" "./${file_dir}"
+# oc -n $OC_NAMESPACE delete pod $pod_name
+
 # gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin.sql" --database=$DB_NAME
 # gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cas.sql" --database=$DB_NAME
 
@@ -39,12 +39,14 @@ oc -n $OC_NAMESPACE delete pod $pod_name
 #   echo $filename
 #   if [[ $filename == *"$file_suffix" ]]; then
 #     sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
-#     gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/cas"
+#     gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/colin/"
 #     rm "./${file_dir}/$filename"
-#     gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cas/${filename}" --database=$DB_NAME --async
+#     gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin/${filename}" --database=$DB_NAME --async
 #     gcloud sql operations list --instance='fin-warehouse-prod' --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 #   fi
 # done
+
+# TODO - cas will be pulled from openshift VPC through the same pod as colin data above
 
 # root_dir="/opt/app-root"
 # cd $root_dir
@@ -74,5 +76,7 @@ echo "ALTER DEFAULT PRIVILEGES IN SCHEMA pay GRANT SELECT ON TABLES TO readonly;
 # echo "ALTER DEFAULT PRIVILEGES IN SCHEMA cas GRANT SELECT ON TABLES TO readonly;" >> readonly.sql
 
 
-gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/readonly.sql" --database=$DB_NAME
-gcloud sql users set-password $DB_USER --instance=$GCP_SQL_INSTANCE --password=$DB_PASSWORD
+gsutil cp readonly.sql "gs://${DB_BUCKET}/"
+gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/readonly.sql" --database=$DB_NAME --user=$DB_USER
+
+# gcloud sql users set-password $DB_USER --instance=$GCP_SQL_INSTANCE --password=$DB_PASSWORD
