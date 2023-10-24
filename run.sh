@@ -2,7 +2,7 @@
 root_dir="/opt/app-root"
 cd $root_dir
 
-if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_CAS" == true ]; then
+if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ]; then
   echo "connecting to openshift"
   oc login --server=$OC_SERVER --token=$OC_TOKEN
 fi
@@ -43,17 +43,13 @@ fi
 
 if [ "$LOAD_COLIN_DELTAS" == true ]; then
   echo "copying cronjob results ..."
+  file_dir="data"
   pod_name="pvc-connector"
   oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
   oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
-  file_dir="data"
   src="${pod_name}://${file_dir}"
   oc -n $OC_NAMESPACE cp "${src}/" "./${file_dir}"
   oc -n $OC_NAMESPACE delete pod $pod_name
-fi
-
-
-if [ "$LOAD_COLIN_DELTAS" == true ]; then
   echo "loadig colin deltas ..."
   file_suffix="_delta.sql"
   schema="COLIN"
@@ -61,9 +57,9 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
     echo $filename
     if [[ $filename == *"$file_suffix" ]]; then
       sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
-      gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/colin/"
+      gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/cprd-delta/"
       rm "./${file_dir}/$filename"
-      gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin/${filename}" --database=$DB_NAME --async
+      gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd-delta/${filename}" --database=$DB_NAME --async
       gcloud sql operations list --instance='fin-warehouse-prod' --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
     fi
   done
