@@ -44,6 +44,20 @@ if [ "$LOAD_CAS_SCHEMA" == true ]; then
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 fi
 
+if [ "$LOAD_COLIN_BASE" == true ]; then
+  echo "loadig colin base files ..."
+  schema="COLIN"
+  file_suffix="_output.sql"
+  for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cprd"); do
+    if [[ $filename == *"$file_suffix" ]]; then
+      # sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
+      echo "$filename"
+      gcloud --quiet sql import sql $GCP_SQL_INSTANCE $filename --database=$DB_NAME --async
+      gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+    fi
+  done
+fi
+
 if [ "$LOAD_COLIN_DELTAS" == true ]; then
   echo "copying cronjob results ..."
   file_dir="data"
