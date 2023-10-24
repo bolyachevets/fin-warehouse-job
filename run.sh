@@ -29,16 +29,19 @@ if [ "$LOAD_PAY" == true ]; then
   gzip $pay_db_file2
   gsutil cp $pay_db_file "gs://${DB_BUCKET}/pay-db/"
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/pay-db/${pay_db_file}" --database=$DB_NAME --user=$DB_USER
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 fi
 
 if [ "$LOAD_COLIN_SCHEMA" == true ]; then
   echo "loadig colin schema ..."
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin.sql" --database=$DB_NAME
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 fi
 
 if [ "$LOAD_CAS_SCHEMA" == true ]; then
   echo "loadig cas schema ..."
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cas.sql" --database=$DB_NAME
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 fi
 
 if [ "$LOAD_COLIN_DELTAS" == true ]; then
@@ -60,7 +63,7 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
       gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/cprd-delta/"
       rm "./${file_dir}/$filename"
       gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd-delta/${filename}" --database=$DB_NAME --async
-      gcloud sql operations list --instance='fin-warehouse-prod' --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+      gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
     fi
   done
 fi
@@ -73,7 +76,7 @@ if [ "$LOAD_CAS" == true ]; then
     if [[ $filename == *"$file_suffix" ]]; then
       echo "$filename"
       gcloud --quiet sql import sql $GCP_SQL_INSTANCE $filename --database=$DB_NAME --async
-      gcloud sql operations list --instance='fin-warehouse-prod' --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+      gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
     fi
   done
 fi
@@ -84,7 +87,7 @@ if [ "$CREATE_READONLY_USER" == true ]; then
   echo "writing create readonly user directives ..."
   # gcloud sql users set-password $DB_USER --instance=$GCP_SQL_INSTANCE --password=$DB_PASSWORD
   echo "CREATE USER readonly WITH PASSWORD ${DB_PASSWORD};" >> readonly.sql
-  echo "GRANT CONNECT ON DATABASE fin_warehouse to readonly;" >> readonly.sql
+  echo "GRANT CONNECT ON DATABASE ${DB_NAME} to readonly;" >> readonly.sql
 fi
 
 
@@ -109,5 +112,5 @@ if [ "$CREATE_READONLY_USER" == true ] || [ "$UPDATE_READONLY_ACCESS" == true ];
   echo "applying readonly user changes ..."
   gsutil cp readonly.sql "gs://${DB_BUCKET}/"
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/readonly.sql" --database=$DB_NAME --user=$DB_USER
-
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 fi
