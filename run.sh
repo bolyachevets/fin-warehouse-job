@@ -58,6 +58,19 @@ if [ "$LOAD_COLIN_BASE" == true ]; then
   done
 fi
 
+if [ "$LOAD_COLIN_DELTAS_BACKUP" == true ]; then
+  echo "loadig colin base files ..."
+  schema="COLIN"
+  file_suffix="_delta.sql"
+  for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cprd-delta"); do
+    if [[ $filename == *"$file_suffix" ]]; then
+      echo "$filename"
+      gcloud --quiet sql import sql $GCP_SQL_INSTANCE $filename --database=$DB_NAME --async
+      gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+    fi
+  done
+fi
+
 if [ "$LOAD_COLIN_DELTAS" == true ]; then
   echo "copying cronjob results ..."
   file_dir="data"
