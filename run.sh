@@ -2,7 +2,7 @@
 root_dir="/opt/app-root"
 cd $root_dir
 
-if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ]; then
+if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ]; then
   echo "connecting to openshift"
   oc login --server=$OC_SERVER --token=$OC_TOKEN
 fi
@@ -44,13 +44,12 @@ if [ "$LOAD_CAS_SCHEMA" == true ]; then
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 fi
 
-if [ "$LOAD_COLIN_BASE" == true ]; then
+if [ "$LOAD_CACHED_COLIN_BASE" == true ]; then
   echo "loadig colin base files ..."
   schema="COLIN"
   file_suffix="_output.sql"
   for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cprd"); do
     if [[ $filename == *"$file_suffix" ]]; then
-      # sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
       echo "$filename"
       gcloud --quiet sql import sql $GCP_SQL_INSTANCE $filename --database=$DB_NAME --async
       gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
@@ -58,8 +57,34 @@ if [ "$LOAD_COLIN_BASE" == true ]; then
   done
 fi
 
+if [ "$LOAD_COLIN_BASE" == true ]; then
+  echo "copying cprd base files from openshift ..."
+  file_dir="data-yesterday"
+  pod_name="pvc-connector"
+  oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
+  oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
+  src="${pod_name}://${file_dir}"
+  mkdir $file_dir
+  oc -n $OC_NAMESPACE rsync "${src}/" "./${file_dir}"
+  sleep 60
+  oc -n $OC_NAMESPACE delete pod $pod_name
+  echo "loadig cprd base files into gcp..."
+  file_suffix="_output.sql"
+  schema="COLIN"
+  for filename in $(ls "./${file_dir}"); do
+    echo $filename
+    if [[ $filename == *"$file_suffix" ]]; then
+      sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
+      gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/cprd/"
+      rm "./${file_dir}/$filename"
+      gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd/${filename}" --database=$DB_NAME --async
+      gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+    fi
+  done
+fi
+
 if [ "$LOAD_COLIN_DELTAS_BACKUP" == true ]; then
-  echo "loadig colin base files ..."
+  echo "loadig cached cprd base files ..."
   schema="COLIN"
   file_suffix="_delta.sql"
   for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cprd-delta"); do
@@ -72,7 +97,7 @@ if [ "$LOAD_COLIN_DELTAS_BACKUP" == true ]; then
 fi
 
 if [ "$LOAD_COLIN_DELTAS" == true ]; then
-  echo "copying cronjob results ..."
+  echo "copying cprd deltas ..."
   file_dir="data"
   pod_name="pvc-connector"
   oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
