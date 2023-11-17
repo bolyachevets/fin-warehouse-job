@@ -10,7 +10,12 @@
       volumeMounts:
         - name: ora2pg-vol
           mountPath: /data
+        - name: ora2pg-vol-yesterday
+          mountPath: /data-yesterday
     volumes:
       - name: ora2pg-vol
         persistentVolumeClaim:
           claimName: ora2pg-pvc
+      - name: ora2pg-vol-yesterday
+        persistentVolumeClaim:
+          claimName: ora2pg-pvc-yesterday
