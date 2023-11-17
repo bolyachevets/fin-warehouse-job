@@ -8,7 +8,7 @@ if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN
 fi
 
 if [ "$LOAD_PAY" == true ]; then
-  echo "loadig colin pay-db dump ..."
+  echo "loadig pay-db dump ..."
   pod_name=$(oc -n $OC_NAMESPACE get pods --selector=$OC_LABEL -o name)
   prefix="pod/"
   pod_name=${pod_name#"$prefix"}
@@ -33,7 +33,7 @@ if [ "$LOAD_PAY" == true ]; then
 fi
 
 if [ "$LOAD_COLIN_SCHEMA" == true ]; then
-  echo "loadig colin schema ..."
+  echo "loadig cprd schema ..."
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin.sql" --database=$DB_NAME
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 fi
