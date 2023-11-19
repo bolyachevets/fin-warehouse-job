@@ -106,6 +106,7 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
   mkdir $file_dir
   oc -n $OC_NAMESPACE rsync "${src}/" "./${file_dir}"
   sleep 30
+  #oc -n $OC_NAMESPACE exec ${pod_name} -- rm -rf "${file_dir}"
   oc -n $OC_NAMESPACE delete pod $pod_name
   echo "loadig colin deltas ..."
   file_suffix="_delta.sql"
