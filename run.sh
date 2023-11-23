@@ -2,6 +2,27 @@
 root_dir="/opt/app-root"
 cd $root_dir
 
+pull_file_from_ocp () {
+  echo "connecting to openshift"
+  oc login --server=$OC_SERVER --token=$OC_TOKEN
+  local filename="$1"
+  local file_dir="$2"
+  pod_name="pvc-connector"
+  oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
+  oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
+  src="${pod_name}://${file_dir}"
+  echo "copying file from openshift ..."
+  oc -n $OC_NAMESPACE cp "${src}/${filename}" "./${filename}"
+  sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${filename}"
+  gsutil cp "./${filename}" "gs://${DB_BUCKET}/cprd/"
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd/${filename}" --database=$DB_NAME --async
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+}
+
+if [ "$PULL_BCONLINE_BILLING_RECORD" == true]
+  pull_file_from_ocp "BCONLINE_BILLING_RECORD_output.sql"
+fi
+
 if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ]; then
   echo "connecting to openshift"
   oc login --server=$OC_SERVER --token=$OC_TOKEN
@@ -114,11 +135,21 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
   for filename in $(ls "./${file_dir}"); do
     echo $filename
     if [[ $filename == *"$file_suffix" ]]; then
-      sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
-      gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/cprd-delta/"
-      rm "./${file_dir}/$filename"
-      gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd-delta/${filename}" --database=$DB_NAME --async
-      gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+      filesize=$(wc -c <"$filename")
+      if [ $actualsize -ge $MAX_DELTA_SIZE ]; then
+        rm "./${file_dir}/$filename"
+        tablename="${filename%"$file_suffix"}"
+        tablename_upper=$(echo $tablename | tr '[:lower:]' '[:upper:]')
+        base_filename="${tablename_upper}_output.sql"
+        echo $base_filename
+        pull_file_from_ocp $base_filename "data-yesterday"
+      else
+        sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
+        gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/cprd-delta/"
+        rm "./${file_dir}/$filename"
+        gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd-delta/${filename}" --database=$DB_NAME --async
+        gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+      fi
     fi
   done
 fi
