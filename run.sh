@@ -8,7 +8,7 @@ if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN
 fi
 
 if [ "$LOAD_PAY" == true ]; then
-  echo "loadig pay-db dump ..."
+  echo "loading pay-db dump ..."
   pod_name=$(oc -n $OC_NAMESPACE get pods --selector=$OC_LABEL -o name)
   prefix="pod/"
   pod_name=${pod_name#"$prefix"}
@@ -33,19 +33,19 @@ if [ "$LOAD_PAY" == true ]; then
 fi
 
 if [ "$LOAD_COLIN_SCHEMA" == true ]; then
-  echo "loadig cprd schema ..."
+  echo "loading cprd schema ..."
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin.sql" --database=$DB_NAME
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 fi
 
 if [ "$LOAD_CAS_SCHEMA" == true ]; then
-  echo "loadig cas schema ..."
+  echo "loading cas schema ..."
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cas.sql" --database=$DB_NAME
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 fi
 
 if [ "$LOAD_CACHED_COLIN_BASE" == true ]; then
-  echo "loadig colin base files ..."
+  echo "loading colin base files ..."
   schema="COLIN"
   file_suffix="_output.sql"
   for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cprd"); do
@@ -68,7 +68,7 @@ if [ "$LOAD_COLIN_BASE" == true ]; then
   oc -n $OC_NAMESPACE rsync "${src}/" "./${file_dir}"
   sleep 60
   oc -n $OC_NAMESPACE delete pod $pod_name
-  echo "loadig cprd base files into gcp..."
+  echo "loading cprd base files into gcp..."
   file_suffix="_output.sql"
   schema="COLIN"
   for filename in $(ls "./${file_dir}"); do
@@ -84,7 +84,7 @@ if [ "$LOAD_COLIN_BASE" == true ]; then
 fi
 
 if [ "$LOAD_CACHED_COLIN_DELTAS" == true ]; then
-  echo "loadig cached cprd base files ..."
+  echo "loading cached cprd base files ..."
   schema="COLIN"
   file_suffix="_delta.sql"
   for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cprd-delta"); do
@@ -108,7 +108,7 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
   sleep 30
   #oc -n $OC_NAMESPACE exec ${pod_name} -- rm -rf "${file_dir}"
   oc -n $OC_NAMESPACE delete pod $pod_name
-  echo "loadig colin deltas ..."
+  echo "loading colin deltas ..."
   file_suffix="_delta.sql"
   schema="COLIN"
   for filename in $(ls "./${file_dir}"); do
@@ -124,7 +124,7 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
 fi
 
 if [ "$LOAD_CAS" == true ]; then
-  echo "loadig cas base files ..."
+  echo "loading cas base files ..."
   # TODO - cas will be pulled from openshift VPC through the same pod as colin data above
   file_suffix="_output.sql"
   for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cas"); do
