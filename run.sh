@@ -83,7 +83,7 @@ if [ "$LOAD_COLIN_BASE" == true ]; then
   done
 fi
 
-if [ "$LOAD_COLIN_DELTAS_BACKUP" == true ]; then
+if [ "$LOAD_CACHED_COLIN_DELTAS" == true ]; then
   echo "loadig cached cprd base files ..."
   schema="COLIN"
   file_suffix="_delta.sql"
