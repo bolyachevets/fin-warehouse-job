@@ -73,6 +73,9 @@ if [ "$LOAD_COLIN_SCHEMA" == true ]; then
   echo "loading cprd schema ..."
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin.sql" --database=$DB_NAME
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+  echo "load indexes ..."
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/views/view_indexes.sql" --database=$DB_NAME
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 fi
 
 if [ "$LOAD_CAS_SCHEMA" == true ]; then
