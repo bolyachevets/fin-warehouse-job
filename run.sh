@@ -163,7 +163,7 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
         echo $base_filename
         pull_file_from_ocp $base_filename "data-yesterday" $schema
       else
-        "processing delta..."
+        echo "processing delta..."
         sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
         gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/cprd-delta/"
         rm "./${file_dir}/$filename"
