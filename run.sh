@@ -18,8 +18,8 @@ pull_file_from_ocp () {
   sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${filename}"
   gsutil cp "./${filename}" "gs://${DB_BUCKET}/cprd/"
   touch truncate_table.sql
-  file_suffix="_output.sql"
-  tablename="${filename%"$file_suffix"}"
+  file_suffix2="_output.sql"
+  tablename="${filename%"$file_suffix2"}"
   tablename_lower=$(echo $tablename | tr '[:upper:]' '[:lower:]')
   echo "TRUNCATE TABLE colin.${tablename_lower};" >> truncate_table.sql
   gsutil cp truncate_table.sql "gs://${DB_BUCKET}/"
@@ -163,6 +163,7 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
         echo $base_filename
         pull_file_from_ocp $base_filename "data-yesterday" $schema
       else
+        "processing delta..."
         sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
         gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/cprd-delta/"
         rm "./${file_dir}/$filename"
