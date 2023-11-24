@@ -7,27 +7,30 @@ pull_file_from_ocp () {
   oc login --server=$OC_SERVER --token=$OC_TOKEN
   local filename="$1"
   local file_dir="$2"
+  local schema="$3"
   pod_name="pvc-connector"
   oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
   oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
   src="${pod_name}://${file_dir}"
   echo "copying file from openshift ..."
   oc -n $OC_NAMESPACE cp "${src}/${filename}" "./${filename}"
+  oc -n $OC_NAMESPACE delete pod $pod_name
   sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${filename}"
   gsutil cp "./${filename}" "gs://${DB_BUCKET}/cprd/"
   touch truncate_table.sql
   file_suffix="_output.sql"
   tablename="${filename%"$file_suffix"}"
-  echo "TRUNCATE TABLE \"${tablename}\";" >> truncate_table.sql
-  gsutil cp drop_table.sql "gs://${DB_BUCKET}/"
-  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/drop_table.sql" --database=$DB_NAME --user=$DB_USER
+  tablename_lower=$(echo $tablename | tr '[:upper:]' '[:lower:]')
+  echo "TRUNCATE TABLE colin.${tablename_lower};" >> truncate_table.sql
+  gsutil cp truncate_table.sql "gs://${DB_BUCKET}/"
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/truncate_table.sql" --database=$DB_NAME --user=$DB_USER
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd/${filename}" --database=$DB_NAME --async
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 }
 
 if [ "$PULL_BCONLINE_BILLING_RECORD" == true ]; then
-  pull_file_from_ocp "BCONLINE_BILLING_RECORD_output.sql" "data-yesterday"
+  pull_file_from_ocp "BCONLINE_BILLING_RECORD_output.sql" "data-yesterday" "COLIN"
 fi
 
 if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ]; then
@@ -66,6 +69,7 @@ if [ "$LOAD_COLIN_SCHEMA" == true ]; then
   echo "DROP SCHEMA colin CASCADE;" >> drop_colin_schema.sql
   gsutil cp drop_colin_schema.sql "gs://${DB_BUCKET}/"
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/drop_colin_schema.sql" --database=$DB_NAME --user=$DB_USER
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
   echo "loading cprd schema ..."
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin.sql" --database=$DB_NAME
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
@@ -147,15 +151,17 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
   for filename in $(ls "./${file_dir}"); do
     echo $filename
     if [[ $filename == *"$file_suffix" ]]; then
-      filesize=$(wc -c <"$filename")
-      if [ $actualsize -ge $MAX_DELTA_SIZE ]; then
+      filesize=$(wc -c <"./${file_dir}/$filename")
+      echo "file size:"
+      echo $filesize
+      if [ $filesize -ge $MAX_DELTA_SIZE ]; then
         rm "./${file_dir}/$filename"
         tablename="${filename%"$file_suffix"}"
         tablename_upper=$(echo $tablename | tr '[:lower:]' '[:upper:]')
         base_filename="${tablename_upper}_output.sql"
         echo "file too large - skipping delta, loading base file instead..."
         echo $base_filename
-        pull_file_from_ocp $base_filename "data-yesterday"
+        pull_file_from_ocp $base_filename "data-yesterday" $schema
       else
         sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
         gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/cprd-delta/"
