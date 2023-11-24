@@ -15,12 +15,19 @@ pull_file_from_ocp () {
   oc -n $OC_NAMESPACE cp "${src}/${filename}" "./${filename}"
   sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${filename}"
   gsutil cp "./${filename}" "gs://${DB_BUCKET}/cprd/"
+  touch truncate_table.sql
+  file_suffix="_output.sql"
+  tablename="${filename%"$file_suffix"}"
+  echo "TRUNCATE TABLE \"${tablename}\";" >> truncate_table.sql
+  gsutil cp drop_table.sql "gs://${DB_BUCKET}/"
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/drop_table.sql" --database=$DB_NAME --user=$DB_USER
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd/${filename}" --database=$DB_NAME --async
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 }
 
-if [ "$PULL_BCONLINE_BILLING_RECORD" == true]
-  pull_file_from_ocp "BCONLINE_BILLING_RECORD_output.sql"
+if [ "$PULL_BCONLINE_BILLING_RECORD" == true ]; then
+  pull_file_from_ocp "BCONLINE_BILLING_RECORD_output.sql" "data-yesterday"
 fi
 
 if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ]; then
@@ -54,6 +61,11 @@ if [ "$LOAD_PAY" == true ]; then
 fi
 
 if [ "$LOAD_COLIN_SCHEMA" == true ]; then
+  echo "dropping cprd schema ..."
+  touch drop_colin_schema.sql
+  echo "DROP SCHEMA colin CASCADE;" >> drop_colin_schema.sql
+  gsutil cp drop_colin_schema.sql "gs://${DB_BUCKET}/"
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/drop_colin_schema.sql" --database=$DB_NAME --user=$DB_USER
   echo "loading cprd schema ..."
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/colin.sql" --database=$DB_NAME
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
@@ -141,6 +153,7 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
         tablename="${filename%"$file_suffix"}"
         tablename_upper=$(echo $tablename | tr '[:lower:]' '[:upper:]')
         base_filename="${tablename_upper}_output.sql"
+        echo "file too large - skipping delta, loading base file instead..."
         echo $base_filename
         pull_file_from_ocp $base_filename "data-yesterday"
       else
