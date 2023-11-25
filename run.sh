@@ -29,6 +29,26 @@ pull_file_from_ocp () {
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 }
 
+if [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
+  echo "connecting to openshift"
+  oc login --server=$OC_SERVER --token=$OC_TOKEN
+  file_dir="data-yesterday"
+  pod_name="pvc-connector"
+  oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
+  oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
+  src="${pod_name}://${file_dir}"
+  file_suffix="_output.sql"
+  for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cprd"); do
+    if [[ $filename == *"$file_suffix" ]]; then
+      echo "$filename"
+      gsutil cp $filename .
+      basename=$(basename ${filename})
+      oc -n $OC_NAMESPACE cp "./${basename}" "${pod_name}://data-yesterday/${basename}"
+    fi
+  done
+  oc -n $OC_NAMESPACE delete pod $pod_name
+fi
+
 if [ "$PULL_BCONLINE_BILLING_RECORD" == true ]; then
   pull_file_from_ocp "BCONLINE_BILLING_RECORD_output.sql" "data-yesterday" "COLIN"
 fi
