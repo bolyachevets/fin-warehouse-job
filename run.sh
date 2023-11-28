@@ -53,6 +53,10 @@ if [ "$PULL_BCONLINE_BILLING_RECORD" == true ]; then
   pull_file_from_ocp "BCONLINE_BILLING_RECORD_output.sql" "data-yesterday" "COLIN"
 fi
 
+if [ "$CREATE_VIEWS" == true ]; then
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/views/views.sql" --database=$DB_NAME --user=$DB_USER
+fi
+
 if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ]; then
   echo "connecting to openshift"
   oc login --server=$OC_SERVER --token=$OC_TOKEN
