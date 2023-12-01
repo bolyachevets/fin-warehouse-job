@@ -21,8 +21,22 @@ pull_file_from_ocp () {
   file_suffix2="_output.sql"
   tablename="${filename%"$file_suffix2"}"
   tablename_lower=$(echo $tablename | tr '[:upper:]' '[:lower:]')
-  echo "TRUNCATE TABLE colin.${tablename_lower};" >> truncate_table.sql
+  echo "TRUNCATE TABLE ${schema}.${tablename_lower};" >> truncate_table.sql
   gsutil cp truncate_table.sql "gs://${DB_BUCKET}/"
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/truncate_table.sql" --database=$DB_NAME --user=$DB_USER
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd/${filename}" --database=$DB_NAME --async
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+}
+
+pull_file_from_cache () {
+  local filename="$1"
+  local schema="$2"
+  touch truncate_table.sql
+  file_suffix2="_output.sql"
+  tablename="${filename%"$file_suffix2"}"
+  tablename_lower=$(echo $tablename | tr '[:upper:]' '[:lower:]')
+  echo "TRUNCATE TABLE ${schema}.${tablename_lower};" >> truncate_table.sql
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/truncate_table.sql" --database=$DB_NAME --user=$DB_USER
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd/${filename}" --database=$DB_NAME --async
@@ -49,8 +63,12 @@ if [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
   oc -n $OC_NAMESPACE delete pod $pod_name
 fi
 
-if [ "$PULL_BCONLINE_BILLING_RECORD" == true ]; then
-  pull_file_from_ocp "BCONLINE_BILLING_RECORD_output.sql" "data-yesterday" "COLIN"
+if [ ! -z "$PULL_CACHED_BASE_FILE" ]; then
+  pull_file_from_cache $PULL_CACHED_BASE_FILE "COLIN"
+fi
+
+if [ ! -z "$PULL_BASE_FILE_FROM_OCP" ]; then
+  pull_file_from_ocp $PULL_BASE_FILE_FROM_OCP "data-yesterday" "COLIN"
 fi
 
 if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ]; then
@@ -185,6 +203,8 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
         echo "file too large - skipping delta, loading base file instead..."
         echo $base_filename
         pull_file_from_ocp $base_filename "data-yesterday" $schema
+        # Delete delta stored as we will not be using it
+        gcloud storage rm "gs://${DB_BUCKET}/cprd-delta/${filename}"
       else
         echo "processing delta..."
         sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
