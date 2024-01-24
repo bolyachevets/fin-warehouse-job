@@ -29,7 +29,7 @@ pull_file_from_ocp () {
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 }
 
-pull_file_from_cache () {
+truncate_table () {
   local filename="$1"
   local schema="$2"
   touch truncate_table.sql
@@ -39,7 +39,17 @@ pull_file_from_cache () {
   echo "TRUNCATE TABLE ${schema}.${tablename_lower};" >> truncate_table.sql
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/truncate_table.sql" --database=$DB_NAME --user=$DB_USER
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
-  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd/${filename}" --database=$DB_NAME --async
+}
+
+pull_file_from_cache () {
+  local filename="$1"
+  local schema="$2"
+  local folder="$3"
+  local truncate="$4"
+  if [ "$truncate" == true ]; then
+    truncate_table $filename $schema
+  fi
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${folder}/${filename}" --database=$DB_NAME --async
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 }
 
@@ -63,8 +73,16 @@ if [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
   oc -n $OC_NAMESPACE delete pod $pod_name
 fi
 
-if [ ! -z "$PULL_CACHED_BASE_FILE" ]; then
-  pull_file_from_cache $PULL_CACHED_BASE_FILE "COLIN"
+if [ ! -z "$PULL_CACHED_BASE_FILE_COLIN" ]; then
+  pull_file_from_cache $PULL_CACHED_BASE_FILE "COLIN" "cprd" "false"
+fi
+
+if [ ! -z "$PULL_CACHED_BASE_FILE_CAS_TRUNCATE" ]; then
+  pull_file_from_cache $PULL_CACHED_BASE_FILE "CAS" "cas/annual" "true"
+fi
+
+if [ ! -z "$PULL_CACHED_BASE_FILE_CAS" ]; then
+  pull_file_from_cache $PULL_CACHED_BASE_FILE "CAS" "cas/annual" "false"
 fi
 
 if [ ! -z "$PULL_BASE_FILE_FROM_OCP" ]; then
@@ -117,8 +135,17 @@ if [ "$LOAD_COLIN_SCHEMA" == true ]; then
 fi
 
 if [ "$LOAD_CAS_SCHEMA" == true ]; then
+  echo "dropping cas schema ..."
+  touch drop_cas_schema.sql
+  echo "DROP SCHEMA cas CASCADE;" >> drop_cas_schema.sql
+  gsutil cp drop_cas_schema.sql "gs://${DB_BUCKET}/"
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/drop_cas_schema.sql" --database=$DB_NAME --user=$DB_USER
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
   echo "loading cas schema ..."
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cas.sql" --database=$DB_NAME
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+  echo "load indexes ..."
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/views/view_indexes.sql" --database=$DB_NAME
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 fi
 
