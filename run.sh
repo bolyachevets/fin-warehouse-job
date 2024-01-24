@@ -74,15 +74,15 @@ if [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
 fi
 
 if [ ! -z "$PULL_CACHED_BASE_FILE_COLIN" ]; then
-  pull_file_from_cache $PULL_CACHED_BASE_FILE "COLIN" "cprd" "false"
+  pull_file_from_cache $PULL_CACHED_BASE_FILE_COLIN "COLIN" "cprd" "false"
 fi
 
 if [ ! -z "$PULL_CACHED_BASE_FILE_CAS_TRUNCATE" ]; then
-  pull_file_from_cache $PULL_CACHED_BASE_FILE "CAS" "cas/annual" "true"
+  pull_file_from_cache $PULL_CACHED_BASE_FILE_CAS_TRUNCATE "CAS" "cas/annual" "true"
 fi
 
 if [ ! -z "$PULL_CACHED_BASE_FILE_CAS" ]; then
-  pull_file_from_cache $PULL_CACHED_BASE_FILE "CAS" "cas/annual" "false"
+  pull_file_from_cache $PULL_CACHED_BASE_FILE_CAS "CAS" "cas/annual" "false"
 fi
 
 if [ ! -z "$PULL_BASE_FILE_FROM_OCP" ]; then
