@@ -35,6 +35,9 @@ truncate_table () {
   touch truncate_table.sql
   file_suffix2="_output.sql"
   tablename="${filename%"$file_suffix2"}"
+  if [[ $tablename = *[0-9] ]]; then
+   tablename=$(echo $tablename | sed 's/_[^_]*$//g')
+  fi
   tablename_lower=$(echo $tablename | tr '[:upper:]' '[:lower:]')
   echo "TRUNCATE TABLE ${schema}.${tablename_lower};" >> truncate_table.sql
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/truncate_table.sql" --database=$DB_NAME --user=$DB_USER
@@ -46,7 +49,7 @@ pull_file_from_cache () {
   local schema="$2"
   local folder="$3"
   local truncate="$4"
-  if [ "$truncate" == true ]; then
+  if [ "$truncate" == "true" ]; then
     truncate_table $filename $schema
   fi
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${folder}/${filename}" --database=$DB_NAME --async
