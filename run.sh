@@ -1,6 +1,7 @@
 #!/bin/bash
 root_dir="/opt/app-root"
 cd $root_dir
+truncate_file="truncate_table.sql"
 
 pull_file_from_ocp () {
   echo "connecting to openshift"
@@ -17,13 +18,13 @@ pull_file_from_ocp () {
   oc -n $OC_NAMESPACE delete pod $pod_name
   sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${filename}"
   gsutil cp "./${filename}" "gs://${DB_BUCKET}/cprd/"
-  touch truncate_table.sql
+  touch $truncate_file
   file_suffix2="_output.sql"
   tablename="${filename%"$file_suffix2"}"
   tablename_lower=$(echo $tablename | tr '[:upper:]' '[:lower:]')
-  echo "TRUNCATE TABLE ${schema}.${tablename_lower};" >> truncate_table.sql
-  gsutil cp truncate_table.sql "gs://${DB_BUCKET}/"
-  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/truncate_table.sql" --database=$DB_NAME --user=$DB_USER
+  echo "TRUNCATE TABLE ${schema}.${tablename_lower};" >> $truncate_file
+  gsutil cp $truncate_file "gs://${DB_BUCKET}/"
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${truncate_file}" --database=$DB_NAME --user=$DB_USER
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd/${filename}" --database=$DB_NAME --async
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
@@ -32,15 +33,16 @@ pull_file_from_ocp () {
 truncate_table () {
   local filename="$1"
   local schema="$2"
-  touch truncate_table.sql
+  touch $truncate_file
   file_suffix2="_output.sql"
   tablename="${filename%"$file_suffix2"}"
   if [[ $tablename = *[0-9] ]]; then
    tablename=$(echo $tablename | sed 's/_[^_]*$//g')
   fi
   tablename_lower=$(echo $tablename | tr '[:upper:]' '[:lower:]')
-  echo "TRUNCATE TABLE ${schema}.${tablename_lower};" >> truncate_table.sql
-  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/truncate_table.sql" --database=$DB_NAME --user=$DB_USER
+  echo "TRUNCATE TABLE ${schema}.${tablename_lower};" >> $truncate_file
+  gsutil cp $truncate_file "gs://${DB_BUCKET}/"
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${truncate_file}" --database=$DB_NAME --user=$DB_USER
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 }
 
