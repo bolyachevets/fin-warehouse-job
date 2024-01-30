@@ -18,14 +18,7 @@ pull_file_from_ocp () {
   oc -n $OC_NAMESPACE delete pod $pod_name
   sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${filename}"
   gsutil cp "./${filename}" "gs://${DB_BUCKET}/cprd/"
-  touch $truncate_file
-  file_suffix2="_output.sql"
-  tablename="${filename%"$file_suffix2"}"
-  tablename_lower=$(echo $tablename | tr '[:upper:]' '[:lower:]')
-  echo "TRUNCATE TABLE ${schema}.${tablename_lower};" >> $truncate_file
-  gsutil cp $truncate_file "gs://${DB_BUCKET}/"
-  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${truncate_file}" --database=$DB_NAME --user=$DB_USER
-  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+  truncate_file $filename $schema
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/cprd/${filename}" --database=$DB_NAME --async
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 }
@@ -101,8 +94,16 @@ if [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
   oc -n $OC_NAMESPACE delete pod $pod_name
 fi
 
+if [ ! -z "$PULL_CACHED_BASE_FILE_COLIN_TRUNCATE" ]; then
+  pull_file_from_cache $PULL_CACHED_BASE_FILE_COLIN "COLIN" "cprd" "true"
+fi
+
 if [ ! -z "$PULL_CACHED_BASE_FILE_COLIN" ]; then
   pull_file_from_cache $PULL_CACHED_BASE_FILE_COLIN "COLIN" "cprd" "false"
+fi
+
+if [ ! -z "$PULL_CACHED_DELTA_FILE_COLIN" ]; then
+  pull_file_from_cache $PULL_CACHED_DELTA_FILE_COLIN "COLIN" "cprd-delta" "false"
 fi
 
 if [ ! -z "$PULL_CACHED_BASE_FILE_CAS_TRUNCATE" ]; then
@@ -113,8 +114,12 @@ if [ ! -z "$PULL_CACHED_BASE_FILE_CAS" ]; then
   pull_file_from_cache $PULL_CACHED_BASE_FILE_CAS "CAS" "cas/annual" "false"
 fi
 
-if [ ! -z "$PULL_BASE_FILE_FROM_OCP" ]; then
-  pull_file_from_ocp $PULL_BASE_FILE_FROM_OCP "data-yesterday" "COLIN"
+if [ ! -z "$PULL_CACHED_DELTA_FILE_CAS" ]; then
+  pull_file_from_cache $PULL_CACHED_DELTA_FILE_CAS "CAS" "cas/upsert" "false"
+fi
+
+if [ ! -z "$PULL_BASE_FILE_FROM_OCP_COLIN" ]; then
+  pull_file_from_ocp $PULL_BASE_FILE_FROM_OCP_COLIN "data-yesterday" "COLIN"
 fi
 
 if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ] || [ "$LOAD_CAS_DELTAS" == true ]; then
