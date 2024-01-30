@@ -64,6 +64,23 @@ load_file () {
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 }
 
+if [ "$TEST_DATA_LOAD_MODE" == true ]; then
+  export LOAD_PAY="true"
+  export LOAD_COLIN_DELTAS="true"
+  export LOAD_CAS_DELTAS="true"
+  export UPDATE_READONLY_ACCESS="true"
+  export CREATE_VIEWS="true"
+fi
+
+if [ "$PROD_DATA_LOAD_MODE" == true ]; then
+  export LOAD_PAY="true"
+  export LOAD_CACHED_COLIN_DELTAS="true"
+  export LOAD_CACHED_CAS_DELTAS="true"
+  export UPDATE_READONLY_ACCESS="true"
+  export CREATE_VIEWS="true"
+fi
+
+
 if [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
   echo "connecting to openshift"
   oc login --server=$OC_SERVER --token=$OC_TOKEN
