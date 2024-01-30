@@ -275,7 +275,7 @@ if [ "$LOAD_CAS_DELTAS" == true ]; then
   oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
   oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
   src="${pod_name}://${file_dir}"
-  mkdir $file_dir
+  mkdir -p $file_dir
   oc -n $OC_NAMESPACE rsync "${src}/" "./${file_dir}"
   sleep 30
   # oc -n $OC_NAMESPACE exec ${pod_name} -- rm -rf "${file_dir}"
@@ -287,7 +287,6 @@ if [ "$LOAD_CAS_DELTAS" == true ]; then
     echo $filename
     if [[ $filename == *"$file_suffix" ]]; then
         echo "processing delta..."
-        sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
         gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/cas/upsert/"
         rm "./${file_dir}/$filename"
         load_file $filename "cas/upsert"
