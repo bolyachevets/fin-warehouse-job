@@ -54,6 +54,12 @@ pull_file_from_cache () {
   if [ "$truncate" == "true" ]; then
     truncate_table $filename $schema
   fi
+  load_file $filename $folder
+}
+
+load_file () {
+  local filename="$1"
+  local folder="$2"
   gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${folder}/${filename}" --database=$DB_NAME --async
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 }
@@ -94,7 +100,7 @@ if [ ! -z "$PULL_BASE_FILE_FROM_OCP" ]; then
   pull_file_from_ocp $PULL_BASE_FILE_FROM_OCP "data-yesterday" "COLIN"
 fi
 
-if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ]; then
+if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ] || [ "$LOAD_CAS_DELTAS" == true ]; then
   echo "connecting to openshift"
   oc login --server=$OC_SERVER --token=$OC_TOKEN
 fi
@@ -194,7 +200,7 @@ if [ "$LOAD_COLIN_BASE" == true ]; then
 fi
 
 if [ "$LOAD_CACHED_COLIN_DELTAS" == true ]; then
-  echo "loading cached cprd base files ..."
+  echo "loading cached cprd delta files ..."
   schema="COLIN"
   file_suffix="_delta.sql"
   for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cprd-delta"); do
@@ -249,11 +255,51 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
   done
 fi
 
+# DEPRECATED
 if [ "$LOAD_CAS" == true ]; then
   echo "loading cas base files ..."
-  # TODO - cas will be pulled from openshift VPC through the same pod as colin data above
   file_suffix="_output.sql"
   for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cas"); do
+    if [[ $filename == *"$file_suffix" ]]; then
+      echo "$filename"
+      gcloud --quiet sql import sql $GCP_SQL_INSTANCE $filename --database=$DB_NAME --async
+      gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+    fi
+  done
+fi
+
+if [ "$LOAD_CAS_DELTAS" == true ]; then
+  echo "copying cas deltas ..."
+  file_dir="data-cas/update"
+  pod_name="pvc-connector"
+  oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
+  oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
+  src="${pod_name}://${file_dir}"
+  mkdir $file_dir
+  oc -n $OC_NAMESPACE rsync "${src}/" "./${file_dir}"
+  sleep 30
+  # oc -n $OC_NAMESPACE exec ${pod_name} -- rm -rf "${file_dir}"
+  oc -n $OC_NAMESPACE delete pod $pod_name
+  echo "loading cas deltas ..."
+  file_suffix="_output.sql"
+  schema="CAS"
+  for filename in $(ls "./${file_dir}"); do
+    echo $filename
+    if [[ $filename == *"$file_suffix" ]]; then
+        echo "processing delta..."
+        sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${file_dir}/$filename"
+        gsutil cp "./${file_dir}/$filename" "gs://${DB_BUCKET}/cas/upsert/"
+        rm "./${file_dir}/$filename"
+        load_file $filename "cas/upsert"
+    fi
+  done
+fi
+
+if [ "$LOAD_CACHED_CAS_DELTAS" == true ]; then
+  echo "loading cached cas delta files ..."
+  schema="COLIN"
+  file_suffix="_output.sql"
+  for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cas/upsert"); do
     if [[ $filename == *"$file_suffix" ]]; then
       echo "$filename"
       gcloud --quiet sql import sql $GCP_SQL_INSTANCE $filename --database=$DB_NAME --async
