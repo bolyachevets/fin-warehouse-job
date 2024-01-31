@@ -5,6 +5,7 @@ truncate_file="truncate_table.sql"
 
 if [ "$TEST_DATA_LOAD_MODE" == true ]; then
   export LOAD_PAY="true"
+  export LOAD_AUTH="true"
   export LOAD_COLIN_DELTAS="true"
   export LOAD_CAS_DELTAS="true"
   export UPDATE_READONLY_ACCESS="true"
@@ -13,6 +14,7 @@ fi
 
 if [ "$PROD_DATA_LOAD_MODE" == true ]; then
   export LOAD_PAY="true"
+  export LOAD_AUTH="true"
   export LOAD_CACHED_COLIN_DELTAS="true"
   export LOAD_CACHED_CAS_DELTAS="true"
   export UPDATE_READONLY_ACCESS="true"
@@ -21,23 +23,49 @@ fi
 
 if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ] || [ "$LOAD_CAS_DELTAS" == true ] || [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
   echo "connecting to openshift"
-  oc login --server=$OC_SERVER --token=$OC_TOKEN
+  oc login --server=$OC_SERVER --token=$OC_PAY_TOKEN
 fi
 
+load_oc_db() {
+  local namespace="$1"
+  local db="$2"
+  local schema="$3"
+  pod_name=$(oc -n $namespace get pods --selector=$OC_LABEL -o name)
+  prefix="pod/"
+  pod_name=${pod_name#"$prefix"}
+  date=$(TZ=US/Pacific date +%Y-%m-%d)
+  src="${pod_name}://backups/daily/${date}/postgresql-${OC_ENV}-${db}_${date}_01-00-00.sql.gz"
+  db_file="${db}.sql.gz"
+  oc -n $namespace cp $src $db_file
+  gunzip $db_file
+  db_file2="${db}.sql"
+  sed -i -e "6s/^//p; 6s/^.*/DROP SCHEMA IF EXISTS postgres_exporter CASCADE;/" $db_file2
+  sed -i -e "6s/^//p; 6s/^.*/DROP SCHEMA IF EXISTS ${schema} CASCADE;/" $db_file2
+  sed -i -e "7s/^//p; 7s/^.*/ALTER SCHEMA public RENAME to public_save;/" $db_file2
+  sed -i -e "8s/^//p; 8s/^.*/CREATE SCHEMA public;/" $db_file2
+  sed -i -e "9s/^//p; 9s/^.*/GRANT ALL ON SCHEMA public TO postgres;/" $db_file2
+  sed -i -e "10s/^//p; 10s/^.*/GRANT ALL ON SCHEMA public TO public;/" $db_file2
+  echo "ALTER SCHEMA public RENAME to ${schema};" >> $db_file2
+  echo "ALTER SCHEMA public_save RENAME to public;" >> $db_file2
+  gzip $db_file2
+  gsutil cp $db_file "gs://${DB_BUCKET}/${db}/"
+  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/${db}/${db_file}" --database=$DB_NAME --user=$DB_USER
+  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+}
 
 pull_file_from_ocp () {
   echo "connecting to openshift"
-  oc login --server=$OC_SERVER --token=$OC_TOKEN
+  oc login --server=$OC_SERVER --token=$OC_PAY_TOKEN
   local filename="$1"
   local file_dir="$2"
   local schema="$3"
   pod_name="pvc-connector"
-  oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
-  oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
+  oc -n $OC_PAY_NAMESPACE create -f "${pod_name}-pod.yaml"
+  oc -n $OC_PAY_NAMESPACE wait --for=condition=ready pod $pod_name
   src="${pod_name}://${file_dir}"
   echo "copying file from openshift ..."
-  oc -n $OC_NAMESPACE cp "${src}/${filename}" "./${filename}"
-  oc -n $OC_NAMESPACE delete pod $pod_name
+  oc -n $OC_PAY_NAMESPACE cp "${src}/${filename}" "./${filename}"
+  oc -n $OC_PAY_NAMESPACE delete pod $pod_name
   sed -i -e "2s/^//p; 2s/^.*/SET search_path TO ${schema};/" "./${filename}"
   gsutil cp "./${filename}" "gs://${DB_BUCKET}/cprd/"
   truncate_file $filename $schema
@@ -82,8 +110,8 @@ load_file () {
 if [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
   file_dir="data-yesterday"
   pod_name="pvc-connector"
-  oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
-  oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
+  oc -n $OC_PAY_NAMESPACE create -f "${pod_name}-pod.yaml"
+  oc -n $OC_PAY_NAMESPACE wait --for=condition=ready pod $pod_name
   src="${pod_name}://${file_dir}"
   file_suffix="_output.sql"
   for filename in $(gcloud storage ls "gs://${DB_BUCKET}/cprd"); do
@@ -91,10 +119,10 @@ if [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
       echo "$filename"
       gsutil cp $filename .
       basename=$(basename ${filename})
-      oc -n $OC_NAMESPACE cp "./${basename}" "${pod_name}://data-yesterday/${basename}"
+      oc -n $OC_PAY_NAMESPACE cp "./${basename}" "${pod_name}://data-yesterday/${basename}"
     fi
   done
-  oc -n $OC_NAMESPACE delete pod $pod_name
+  oc -n $OC_PAY_NAMESPACE delete pod $pod_name
 fi
 
 if [ ! -z "$PULL_CACHED_BASE_FILE_COLIN_TRUNCATE" ]; then
@@ -127,27 +155,14 @@ fi
 
 if [ "$LOAD_PAY" == true ]; then
   echo "loading pay-db dump ..."
-  pod_name=$(oc -n $OC_NAMESPACE get pods --selector=$OC_LABEL -o name)
-  prefix="pod/"
-  pod_name=${pod_name#"$prefix"}
-  date=$(TZ=US/Pacific date +%Y-%m-%d)
-  src="${pod_name}://backups/daily/${date}/postgresql-${OC_ENV}-pay-db_${date}_01-00-00.sql.gz"
-  pay_db_file="pay-db.sql.gz"
-  oc -n $OC_NAMESPACE cp $src $pay_db_file
-  gunzip $pay_db_file
-  pay_db_file2="pay-db.sql"
-  sed -i -e "6s/^//p; 6s/^.*/DROP SCHEMA IF EXISTS postgres_exporter CASCADE;/" $pay_db_file2
-  sed -i -e "6s/^//p; 6s/^.*/DROP SCHEMA IF EXISTS PAY CASCADE;/" $pay_db_file2
-  sed -i -e "7s/^//p; 7s/^.*/ALTER SCHEMA public RENAME to public_save;/" $pay_db_file2
-  sed -i -e "8s/^//p; 8s/^.*/CREATE SCHEMA public;/" $pay_db_file2
-  sed -i -e "9s/^//p; 9s/^.*/GRANT ALL ON SCHEMA public TO postgres;/" $pay_db_file2
-  sed -i -e "10s/^//p; 10s/^.*/GRANT ALL ON SCHEMA public TO public;/" $pay_db_file2
-  echo "ALTER SCHEMA public RENAME to PAY;" >> $pay_db_file2
-  echo "ALTER SCHEMA public_save RENAME to public;" >> $pay_db_file2
-  gzip $pay_db_file2
-  gsutil cp $pay_db_file "gs://${DB_BUCKET}/pay-db/"
-  gcloud --quiet sql import sql $GCP_SQL_INSTANCE "gs://${DB_BUCKET}/pay-db/${pay_db_file}" --database=$DB_NAME --user=$DB_USER
-  gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
+  load_oc_db $OC_PAY_NAMESPACE "pay-db" "PAY"
+fi
+
+if [ "$LOAD_AUTH" == true ]; then
+  echo "connecting to openshift"
+  oc login --server=$OC_SERVER --token=$OC_AUTH_TOKEN
+  echo "loading auth-db dump ..."
+  load_oc_db $OC_AUTH_NAMESPACE "auth-db" "AUTH"
 fi
 
 if [ "$LOAD_COLIN_SCHEMA" == true ]; then
@@ -197,13 +212,13 @@ if [ "$LOAD_COLIN_BASE" == true ]; then
   echo "copying cprd base files from openshift ..."
   file_dir="data-yesterday"
   pod_name="pvc-connector"
-  oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
-  oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
+  oc -n $OC_PAY_NAMESPACE create -f "${pod_name}-pod.yaml"
+  oc -n $OC_PAY_NAMESPACE wait --for=condition=ready pod $pod_name
   src="${pod_name}://${file_dir}"
   mkdir $file_dir
-  oc -n $OC_NAMESPACE rsync "${src}/" "./${file_dir}"
+  oc -n $OC_PAY_NAMESPACE rsync "${src}/" "./${file_dir}"
   sleep 60
-  oc -n $OC_NAMESPACE delete pod $pod_name
+  oc -n $OC_PAY_NAMESPACE delete pod $pod_name
   echo "loading cprd base files into gcp..."
   file_suffix="_output.sql"
   schema="COLIN"
@@ -236,14 +251,14 @@ if [ "$LOAD_COLIN_DELTAS" == true ]; then
   echo "copying cprd deltas ..."
   file_dir="data"
   pod_name="pvc-connector"
-  oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
-  oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
+  oc -n $OC_PAY_NAMESPACE create -f "${pod_name}-pod.yaml"
+  oc -n $OC_PAY_NAMESPACE wait --for=condition=ready pod $pod_name
   src="${pod_name}://${file_dir}"
   mkdir $file_dir
-  oc -n $OC_NAMESPACE rsync "${src}/" "./${file_dir}"
+  oc -n $OC_PAY_NAMESPACE rsync "${src}/" "./${file_dir}"
   sleep 30
-  #oc -n $OC_NAMESPACE exec ${pod_name} -- rm -rf "${file_dir}"
-  oc -n $OC_NAMESPACE delete pod $pod_name
+  #oc -n $OC_PAY_NAMESPACE exec ${pod_name} -- rm -rf "${file_dir}"
+  oc -n $OC_PAY_NAMESPACE delete pod $pod_name
   echo "loading colin deltas ..."
   file_suffix="_delta.sql"
   schema="COLIN"
@@ -292,14 +307,14 @@ if [ "$LOAD_CAS_DELTAS" == true ]; then
   echo "copying cas deltas ..."
   file_dir="data-cas/update"
   pod_name="pvc-connector"
-  oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
-  oc -n $OC_NAMESPACE wait --for=condition=ready pod $pod_name
+  oc -n $OC_PAY_NAMESPACE create -f "${pod_name}-pod.yaml"
+  oc -n $OC_PAY_NAMESPACE wait --for=condition=ready pod $pod_name
   src="${pod_name}://${file_dir}"
   mkdir -p $file_dir
-  oc -n $OC_NAMESPACE rsync "${src}/" "./${file_dir}"
+  oc -n $OC_PAY_NAMESPACE rsync "${src}/" "./${file_dir}"
   sleep 30
-  # oc -n $OC_NAMESPACE exec ${pod_name} -- rm -rf "${file_dir}"
-  oc -n $OC_NAMESPACE delete pod $pod_name
+  # oc -n $OC_PAY_NAMESPACE exec ${pod_name} -- rm -rf "${file_dir}"
+  oc -n $OC_PAY_NAMESPACE delete pod $pod_name
   echo "loading cas deltas ..."
   file_suffix="_output.sql"
   schema="CAS"
