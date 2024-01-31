@@ -5,7 +5,7 @@ truncate_file="truncate_table.sql"
 
 if [ "$TEST_DATA_LOAD_MODE" == true ]; then
   export LOAD_PAY="true"
-  export LOAD_AUTH="true"
+  # export LOAD_AUTH="true"
   export LOAD_COLIN_DELTAS="true"
   export LOAD_CAS_DELTAS="true"
   export UPDATE_READONLY_ACCESS="true"
@@ -14,7 +14,7 @@ fi
 
 if [ "$PROD_DATA_LOAD_MODE" == true ]; then
   export LOAD_PAY="true"
-  export LOAD_AUTH="true"
+  # export LOAD_AUTH="true"
   export LOAD_CACHED_COLIN_DELTAS="true"
   export LOAD_CACHED_CAS_DELTAS="true"
   export UPDATE_READONLY_ACCESS="true"
