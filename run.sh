@@ -37,6 +37,14 @@ load_oc_db() {
   src="${pod_name}://backups/daily/${date}/postgresql-${OC_ENV}-${db}_${date}_01-00-00.sql.gz"
   db_file="${db}.sql.gz"
   oc -n $namespace cp $src $db_file
+  if [ -e $db_file ]
+  then
+      echo "downloaded successfully from daily backups"
+  else
+    src="${pod_name}://backups/monthly/${date}/postgresql-${OC_ENV}-${db}_${date}_01-00-00.sql.gz"
+    oc -n $namespace cp $src $db_file
+    echo "downloaded successfully from monthly backups"
+  fi
   gunzip $db_file
   db_file2="${db}.sql"
   sed -i -e "6s/^//p; 6s/^.*/DROP SCHEMA IF EXISTS postgres_exporter CASCADE;/" $db_file2
