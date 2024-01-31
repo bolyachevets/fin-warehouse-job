@@ -3,6 +3,28 @@ root_dir="/opt/app-root"
 cd $root_dir
 truncate_file="truncate_table.sql"
 
+if [ "$TEST_DATA_LOAD_MODE" == true ]; then
+  export LOAD_PAY="true"
+  export LOAD_COLIN_DELTAS="true"
+  export LOAD_CAS_DELTAS="true"
+  export UPDATE_READONLY_ACCESS="true"
+  export CREATE_VIEWS="true"
+fi
+
+if [ "$PROD_DATA_LOAD_MODE" == true ]; then
+  export LOAD_PAY="true"
+  export LOAD_CACHED_COLIN_DELTAS="true"
+  export LOAD_CACHED_CAS_DELTAS="true"
+  export UPDATE_READONLY_ACCESS="true"
+  export CREATE_VIEWS="true"
+fi
+
+if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ] || [ "$LOAD_CAS_DELTAS" == true ] || [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
+  echo "connecting to openshift"
+  oc login --server=$OC_SERVER --token=$OC_TOKEN
+fi
+
+
 pull_file_from_ocp () {
   echo "connecting to openshift"
   oc login --server=$OC_SERVER --token=$OC_TOKEN
@@ -57,26 +79,7 @@ load_file () {
   gcloud sql operations list --instance=$GCP_SQL_INSTANCE --filter='NOT status:done' --format='value(name)' | xargs -r gcloud sql operations wait --timeout=unlimited
 }
 
-if [ "$TEST_DATA_LOAD_MODE" == true ]; then
-  export LOAD_PAY="true"
-  export LOAD_COLIN_DELTAS="true"
-  export LOAD_CAS_DELTAS="true"
-  export UPDATE_READONLY_ACCESS="true"
-  export CREATE_VIEWS="true"
-fi
-
-if [ "$PROD_DATA_LOAD_MODE" == true ]; then
-  export LOAD_PAY="true"
-  export LOAD_CACHED_COLIN_DELTAS="true"
-  export LOAD_CACHED_CAS_DELTAS="true"
-  export UPDATE_READONLY_ACCESS="true"
-  export CREATE_VIEWS="true"
-fi
-
-
 if [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
-  echo "connecting to openshift"
-  oc login --server=$OC_SERVER --token=$OC_TOKEN
   file_dir="data-yesterday"
   pod_name="pvc-connector"
   oc -n $OC_NAMESPACE create -f "${pod_name}-pod.yaml"
@@ -95,7 +98,7 @@ if [ "$MOVE_BASE_FILES_TO_OCP" == true ]; then
 fi
 
 if [ ! -z "$PULL_CACHED_BASE_FILE_COLIN_TRUNCATE" ]; then
-  pull_file_from_cache $PULL_CACHED_BASE_FILE_COLIN "COLIN" "cprd" "true"
+  pull_file_from_cache $PULL_CACHED_BASE_FILE_COLIN_TRUNCATE "COLIN" "cprd" "true"
 fi
 
 if [ ! -z "$PULL_CACHED_BASE_FILE_COLIN" ]; then
@@ -120,11 +123,6 @@ fi
 
 if [ ! -z "$PULL_BASE_FILE_FROM_OCP_COLIN" ]; then
   pull_file_from_ocp $PULL_BASE_FILE_FROM_OCP_COLIN "data-yesterday" "COLIN"
-fi
-
-if [ "$LOAD_PAY" == true ] || [ "$LOAD_COLIN_DELTAS" == true ] || [ "$LOAD_COLIN_BASE" == true ] || [ "$LOAD_CAS_DELTAS" == true ]; then
-  echo "connecting to openshift"
-  oc login --server=$OC_SERVER --token=$OC_TOKEN
 fi
 
 if [ "$LOAD_PAY" == true ]; then
